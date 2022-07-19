@@ -8,7 +8,6 @@ import com.herokuapp.restfulbooker.model.booking.CreateBookingResponse;
 import io.restassured.RestAssured;
 import io.restassured.config.EncoderConfig;
 import io.restassured.config.RestAssuredConfig;
-import org.assertj.core.api.SoftAssertions;
 import org.junit.jupiter.api.BeforeAll;
 
 import java.time.Instant;
