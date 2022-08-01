@@ -6,8 +6,6 @@ import lombok.Data;
 @Data
 @Builder
 public class TokenCredentials {
-    @Builder.Default
-    String username = "admin";
-    @Builder.Default
-    String password = "password123";
+    String username;
+    String password;
 }

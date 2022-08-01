@@ -1,128 +1,60 @@
 package com.herokuapp.restfulbooker;
 
+import com.herokuapp.restfulbooker.model.enums.StatusCodes;
+import com.herokuapp.restfulbooker.service.BookerService;
 import org.junit.jupiter.api.Test;
 
-import static io.restassured.RestAssured.given;
-import static io.restassured.http.ContentType.JSON;
-import static org.hamcrest.Matchers.*;
+import static com.herokuapp.restfulbooker.model.enums.HeaderType.*;
+import static com.herokuapp.restfulbooker.model.enums.StatusCodes.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
-public class DeleteBookingTests extends CreateBookingFixture {
+public class DeleteBookingTests  {
+
+    private final BookerService bookerService = new BookerService();
 
     @Test
-    public void testDeleteValidBookingWithAbsentAuthorization() {
-        given()
-                .contentType(JSON)
-                .when()
-                .delete("/booking/{id}", bookingId)
-                .then()
-                .statusCode(403)
-                .body(equalTo("Forbidden"));
+    public void testDeleteValidBookingWithBasicAuth() {
+        int bookingId = bookerService.createBooking().getBookingId();
+        bookerService.checkPresenceOfBooking(bookingId);
+
+        String response = bookerService.deleteBooking(bookingId, CREATED, BASIC_AUTHORIZATION);
+        assertThat(response).isEqualTo("Created");
+
+        bookerService.checkAbsenceOfBooking(bookingId);
+
+        //Check correct behaviour after repeated call of delete
+        response = bookerService.deleteBooking(bookingId, METHOD_NOT_ALLOWED, BASIC_AUTHORIZATION);
+        assertThat(response).isEqualTo("Method Not Allowed");
     }
 
     @Test
     public void testDeleteValidBookingWithCookie() {
-        checkPresenceOfBooking();
+        int bookingId = bookerService.createBooking().getBookingId();
+        bookerService.checkPresenceOfBooking(bookingId);
 
-        //DELETE booking
-        given()
-                .contentType(JSON)
-                .header("Cookie", "token=" + token)
-                .when()
-                .delete("/booking/{id}", bookingId)
-                .then()
-                .statusCode(201)
-                .body(equalTo("Created"));
+        String response = bookerService.deleteBooking(bookingId, CREATED, COOKIE);
+        assertThat(response).isEqualTo("Created");
 
-        checkAbsenceOfBooking();
+        bookerService.checkAbsenceOfBooking(bookingId);
 
         //Check correct behaviour after repeated call of delete
-        given()
-                .contentType(JSON)
-                .header("Cookie", "token=" + token)
-                .when()
-                .delete("/booking/{id}", bookingId)
-                .then()
-                .statusCode(405)
-                .body(equalTo("Method Not Allowed"));
+        response = bookerService.deleteBooking(bookingId, METHOD_NOT_ALLOWED, COOKIE);
+        assertThat(response).isEqualTo("Method Not Allowed");
+    }
+
+    @Test
+    public void testDeleteValidBookingWithAbsentAuthorization() {
+        int bookingId = bookerService.createBooking().getBookingId();
+        String response = bookerService.deleteBooking(bookingId, FORBIDDEN, EMPTY);
+        assertThat(response).isEqualTo("Forbidden");
     }
 
     @Test
     public void testDeleteValidBookingWithAbsentId() {
-        given()
-                .contentType(JSON)
-                .header("Cookie", "token=" + token)
-                .when()
-                .delete("/booking/8000008")
-                .then()
-                .statusCode(405)
-                .body(equalTo("Method Not Allowed"));
-    }
+        String response = bookerService.deleteBooking(8000008, METHOD_NOT_ALLOWED, COOKIE);
+        assertThat(response).isEqualTo("Method Not Allowed");
 
-    @Test
-    public void testDeleteValidBookingWithBasicAuth() {
-        createBooking();
-        checkPresenceOfBooking();
-
-        //DELETE booking
-        given()
-                .contentType(JSON)
-                .header("Authorization", AUTH_HEADER)
-                .when()
-                .delete("/booking/{id}", bookingId)
-                .then()
-                .statusCode(201)
-                .body(equalTo("Created"));
-
-        checkAbsenceOfBooking();
-
-        //Check correct behaviour after repeated call of delete
-        given()
-                .contentType(JSON)
-                .header("Authorization", AUTH_HEADER)
-                .when()
-                .delete("/booking/{id}", bookingId)
-                .then()
-                .statusCode(405)
-                .body(equalTo("Method Not Allowed"));
-    }
-
-    private void checkPresenceOfBooking(){
-        //Check that "record" of created booking is available
-        given()
-                .contentType(JSON)
-                .when()
-                .get("/booking/{id}", bookingId)
-                .then()
-                .statusCode(200);
-
-        //Check that id of created booking is present in list of all ids
-        given()
-                .contentType(JSON)
-                .when()
-                .get("/booking")
-                .then()
-                .statusCode(200)
-                .body("bookingid.", hasItem(bookingId));
-    }
-
-    private void checkAbsenceOfBooking(){
-
-        //Check that "record" of created booking is absent
-        given()
-                .contentType(JSON)
-                .when()
-                .get("/booking/{id}", bookingId)
-                .then()
-                .statusCode(404)
-                .body(equalTo("Not Found"));
-
-        //Check that id of created booking is present in list of all ids
-        given()
-                .contentType(JSON)
-                .when()
-                .get("/booking")
-                .then()
-                .statusCode(200)
-                .body("bookingid.", not(hasItem(bookingId)));
+        response = bookerService.deleteBooking(8000008, METHOD_NOT_ALLOWED, BASIC_AUTHORIZATION);
+        assertThat(response).isEqualTo("Method Not Allowed");
     }
 }

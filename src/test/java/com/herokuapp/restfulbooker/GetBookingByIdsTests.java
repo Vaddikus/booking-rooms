@@ -1,69 +1,64 @@
 package com.herokuapp.restfulbooker;
 
+import com.herokuapp.restfulbooker.model.booking.CreateBookingResponse;
+import com.herokuapp.restfulbooker.model.enums.StatusCodes;
+import com.herokuapp.restfulbooker.service.BookerService;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.List;
 
-import static io.restassured.RestAssured.given;
-import static io.restassured.http.ContentType.JSON;
+import static com.herokuapp.restfulbooker.model.enums.HeaderType.BASIC_AUTHORIZATION;
+import static com.herokuapp.restfulbooker.model.enums.StatusCodes.*;
 import static org.hamcrest.Matchers.*;
 
-public class GetBookingByIdsTests extends CreateBookingFixture {
+public class GetBookingByIdsTests {
+
+    private final static BookerService bookerService = new BookerService();
+    private static CreateBookingResponse bookingResponse;
+    private static int bookingId;
+
+    @BeforeAll
+    static void setUp() {
+        bookingResponse = bookerService.createBooking();
+        bookingId = bookingResponse.getBookingId();
+    }
+
+    @AfterAll
+    static void tearDown() {
+        bookerService.deleteBooking(bookingId, CREATED, BASIC_AUTHORIZATION);
+    }
 
     @Test
     public void testGetAllByIds() {
-        given()
-                .contentType(JSON)
-                .when()
-                .get("/booking")
-                .then()
-                .statusCode(200)
+        bookerService.checkPresenceOfBooking(bookingId);
+        bookerService.getAllByIds(SUCCESS)
                 .body("bookingid.", hasItem(bookingId));
     }
 
     @Test
     public void testGetAllByIdsAndName() {
-        String firstName = booking.getBooking().getFirstName();
-        String lastName = booking.getBooking().getLastName();
+        String firstName = bookingResponse.getBooking().getFirstName();
+        String lastName = bookingResponse.getBooking().getLastName();
 
-        given()
-                .contentType(JSON)
-                .param("firstname", firstName)
-                .param("lastname", lastName)
-                .when()
-                .get("/booking")
-                .then()
-                .statusCode(200)
+        bookerService.getAllByIdsWithName(SUCCESS, List.of(firstName, lastName))
                 .body("bookingid.", hasItem(bookingId));
     }
 
     @Test
     public void testGetAllByIdsAndOtherName() {
-        given()
-                .contentType(JSON)
-                .param("firstname", "Jim")
-                .param("lastname", "Brown")
-                .when()
-                .get("/booking")
-                .then()
-                .statusCode(200)
+        bookerService.getAllByIdsWithName(SUCCESS, List.of("Jim", "Brown"))
                 .body("bookingid.", not(hasItem(bookingId)));
     }
 
     @Test
     public void testGetAllByIdsAndInvalidName() {
-        given()
-                .contentType(JSON)
-                .param("firstname", "Jim")
-                .param("lastname", "Brown1")
-                .when()
-                .get("/booking")
-                .then()
-                .statusCode(200)
+        bookerService.getAllByIdsWithName(SUCCESS, List.of("Aaa", "Bbb111"))
                 .body(is("[]"));
     }
 
@@ -73,80 +68,53 @@ public class GetBookingByIdsTests extends CreateBookingFixture {
     @Test
     public void testGetAllByDate() {
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-        String checkInDate = dateFormat.format(booking.getBooking().getBookingDates().getCheckIn());
-        String checkOutDate = dateFormat.format(booking.getBooking().getBookingDates().getCheckOut());
-        given()
-                .contentType(JSON)
-                .contentType(JSON)
-                .param("checkin", checkInDate)
-                .param("checkout", checkOutDate)
-                .when()
-                .get("/booking")
-                .then()
-                .statusCode(200)
-                .body("bookingid.", hasItem(bookingId));
+        String checkInDate = dateFormat.format(bookingResponse.getBooking().getBookingDates().getCheckIn());
+        String checkOutDate = dateFormat.format(bookingResponse.getBooking().getBookingDates().getCheckOut());
+
+        bookerService.getAllByIdsWithDates(SUCCESS, List.of(checkInDate, checkOutDate))
+                        .body("bookingid.", hasItem(bookingId));
+
     }
 
     @Test
     public void testGetAllByDateWiderRange() {
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-        String checkInDate =  dateFormat.format(Date.from(booking.getBooking().getBookingDates()
+        String checkInDate = dateFormat.format(Date.from(bookingResponse.getBooking().getBookingDates()
                 .getCheckIn()
                 .toInstant()
                 .minus(4, ChronoUnit.DAYS)));
-        String checkOutDate = dateFormat.format(Date.from(booking.getBooking().getBookingDates()
+        String checkOutDate = dateFormat.format(Date.from(bookingResponse.getBooking().getBookingDates()
                 .getCheckIn()
                 .toInstant()
-                .plus(2, ChronoUnit.DAYS)));;
-        given()
-                .contentType(JSON)
-                .contentType(JSON)
-                .param("checkin", checkInDate)
-                .param("checkout", checkOutDate)
-                .when()
-                .get("/booking")
-                .then()
-                .statusCode(200)
+                .plus(2, ChronoUnit.DAYS)));
+
+        bookerService.getAllByIdsWithDates(SUCCESS, List.of(checkInDate, checkOutDate))
                 .body("bookingid.", hasItem(bookingId));
     }
 
     @Test
     public void testGetAllByDateLateCheckIn() {
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-        String checkInDate =  dateFormat.format(Date.from(booking.getBooking().getBookingDates()
+        String checkInDate = dateFormat.format(Date.from(bookingResponse.getBooking().getBookingDates()
                 .getCheckIn()
                 .toInstant()
                 .plus(1, ChronoUnit.DAYS)));
-        String checkOutDate = dateFormat.format(booking.getBooking().getBookingDates().getCheckOut());
-        given()
-                .contentType(JSON)
-                .contentType(JSON)
-                .param("checkin", checkInDate)
-                .param("checkout", checkOutDate)
-                .when()
-                .get("/booking")
-                .then()
-                .statusCode(200)
+        String checkOutDate = dateFormat.format(bookingResponse.getBooking().getBookingDates().getCheckOut());
+
+        bookerService.getAllByIdsWithDates(SUCCESS, List.of(checkInDate, checkOutDate))
                 .body("bookingid.", not(hasItem(bookingId)));
     }
 
     @Test
     public void testGetAllByDateEarlyCheckOut() {
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-        String checkInDate = dateFormat.format(booking.getBooking().getBookingDates().getCheckIn());
-        String checkOutDate =  dateFormat.format(Date.from(booking.getBooking().getBookingDates()
+        String checkInDate = dateFormat.format(bookingResponse.getBooking().getBookingDates().getCheckIn());
+        String checkOutDate = dateFormat.format(Date.from(bookingResponse.getBooking().getBookingDates()
                 .getCheckOut()
                 .toInstant()
                 .minus(1, ChronoUnit.DAYS)));
-        given()
-                .contentType(JSON)
-                .contentType(JSON)
-                .param("checkin", checkInDate)
-                .param("checkout", checkOutDate)
-                .when()
-                .get("/booking")
-                .then()
-                .statusCode(200)
+
+        bookerService.getAllByIdsWithDates(SUCCESS, List.of(checkInDate, checkOutDate))
                 .body("bookingid.", not(hasItem(bookingId)));
     }
 
@@ -154,26 +122,8 @@ public class GetBookingByIdsTests extends CreateBookingFixture {
     //It is not good that service can't handle errors properly
     @Test
     public void testGetAllByDateCorruptedData() {
-        given()
-                .contentType(JSON)
-                .contentType(JSON)
-                .param("checkin", "2022-05-a")
-                .param("checkout", "2022-07-10")
-                .when()
-                .get("/booking")
-                .then()
-                .statusCode(400);
-    }
 
-    @AfterAll
-    static void tearDown(){
-        given()
-                .contentType(JSON)
-                .header("Cookie", "token=" + token)
-                .when()
-                .delete("/booking/{id}", bookingId)
-                .then()
-                .statusCode(201)
-                .body(equalTo("Created"));
+        bookerService.getAllByIdsWithDates(BAD_REQUEST, List.of("2022-05-a", "2022-07-10"));
+
     }
 }

@@ -1,19 +1,13 @@
 package com.herokuapp.restfulbooker;
 
-import com.github.javafaker.Faker;
 import com.herokuapp.restfulbooker.model.booking.BookingDetails;
-import org.assertj.core.api.SoftAssertions;
+import com.herokuapp.restfulbooker.model.booking.CreateBookingResponse;
+import com.herokuapp.restfulbooker.service.BookerService;
+import com.herokuapp.restfulbooker.util.BookerServiceHelper;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBException;
-import javax.xml.bind.Marshaller;
-import javax.xml.bind.Unmarshaller;
-import java.io.StringReader;
-import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -22,55 +16,57 @@ import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.logging.Logger;
 
-import static io.restassured.RestAssured.given;
-import static io.restassured.http.ContentType.JSON;
-import static io.restassured.http.ContentType.URLENC;
+import static com.herokuapp.restfulbooker.model.enums.HeaderType.BASIC_AUTHORIZATION;
+import static com.herokuapp.restfulbooker.model.enums.HeaderType.COOKIE;
+import static com.herokuapp.restfulbooker.model.enums.StatusCodes.*;
+import static io.restassured.http.ContentType.*;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.equalTo;
 
-public class PartialUpdateBookingTests extends CreateBookingFixture {
+public class PartialUpdateBookingTests {
+
+    protected final static Logger LOGGER = Logger.getLogger(BookerService.class.getName());
+    private final static BookerService bookerService = new BookerService();
+    private static CreateBookingResponse bookingResponse;
+    private static int bookingId;
+
+    @BeforeAll
+    static void setUp() {
+        bookingResponse = bookerService.createBooking();
+        bookingId = bookingResponse.getBookingId();
+    }
+
+    @AfterAll
+    static void tearDown() {
+        bookerService.deleteBooking(bookingId, CREATED, COOKIE);
+    }
 
     @Test
     public void testPartialUpdateWithCookieAndJson() {
 
-        checkDefaultBookingData();
-        BookingDetails updateRequest = buildRequest();
-
-        BookingDetails updateResponse = given()
-                .contentType(JSON)
-                .header("Cookie", "token=" + token)
-                .body(gson.toJson(updateRequest))
-                .when()
-                .patch("/booking/{id}", bookingId)
-                .as(BookingDetails.class);
+        BookingDetails updateRequest = BookerService.buildRequest();
+        BookingDetails updateResponse = bookerService.updateBooking(updateRequest, SUCCESS, bookingId, JSON, COOKIE, BookingDetails.class);
 
         checkUpdatedBookingData(updateRequest, updateResponse);
-        BookingDetails getResponse = getBookingById();
+        BookingDetails getResponse = bookerService.getBookingById(bookingId);
         checkUpdatedBookingData(updateRequest, getResponse);
     }
-
 
     @Test
     public void testValidDateUpdate() {
 
-        checkDefaultBookingData();
-        BookingDetails updateRequest = buildRequest();
+        BookingDetails updateRequest = BookerService.buildRequest();
         updateRequest.setBookingDates(BookingDetails.BookingDates.builder()
-                        .checkIn(Date.from(Instant.now().plus(2, ChronoUnit.DAYS)))
-                        .checkOut(Date.from(Instant.now().plus(6, ChronoUnit.DAYS)))
-                        .build());
+                .checkIn(Date.from(Instant.now().plus(2, ChronoUnit.DAYS)))
+                .checkOut(Date.from(Instant.now().plus(6, ChronoUnit.DAYS)))
+                .build());
 
-        BookingDetails updateResponse = given()
-                .contentType(JSON)
-                .header("Cookie", "token=" + token)
-                .body(gson.toJson(updateRequest))
-                .when()
-                .patch("/booking/{id}", bookingId)
-                .as(BookingDetails.class);
+        BookingDetails updateResponse = bookerService.updateBooking(updateRequest, SUCCESS,
+                bookingId, JSON, COOKIE, BookingDetails.class);
 
         checkUpdatedBookingData(updateRequest, updateResponse);
-        BookingDetails getResponse = getBookingById();
+        BookingDetails getResponse = bookerService.getBookingById(bookingId);
         checkUpdatedBookingData(updateRequest, getResponse);
     }
 
@@ -78,69 +74,41 @@ public class PartialUpdateBookingTests extends CreateBookingFixture {
     @Test
     public void testIncorrectDateUpdate() {
 
-        checkDefaultBookingData();
+        BookingDetails updateRequest = BookerService.buildRequest();
+        updateRequest.setBookingDates(BookingDetails.BookingDates.builder()
+                .checkIn(Date.from(Instant.now().plus(6, ChronoUnit.DAYS)))
+                .checkOut(Date.from(Instant.now().minus(6, ChronoUnit.DAYS)))
+                .build());
 
-        BookingDetails updateRequest = BookingDetails.builder()
-                .bookingDates(BookingDetails.BookingDates.builder()
-                        .checkIn(Date.from(Instant.now().plus(6, ChronoUnit.DAYS)))
-                        .checkOut(Date.from(Instant.now().minus(6, ChronoUnit.DAYS)))
-                        .build())
-                .build();
-
-        given()
-                .contentType(JSON)
-                .header("Cookie", "token=" + token)
-                .body(gson.toJson(updateRequest))
-                .when()
-                .patch("/booking/{id}", bookingId)
-                .then()
-                .statusCode(400);
+        bookerService.updateBooking(updateRequest, BAD_REQUEST, bookingId, JSON, COOKIE, String.class);
     }
 
+    //Test fails here - because status code is 200 (instead of 400) and no error message
     @Test
-    public void invalidParameterUpdate() {
+    public void invalidParameterUpdateTotalPrice() {
+        String body = "{\"totalprice\": \"a\"}";
+        bookerService.updateBooking(body, BAD_REQUEST, bookingId, JSON, COOKIE);
+    }
 
-        //Test fails here - because status code is 200 and no error message
-        given()
-                .contentType(JSON)
-                .header("Cookie", "token=" + token)
-                .body("{\"totalprice\": \"a\"}")
-                .when()
-                .patch("/booking/{id}", bookingId)
-                .then()
-                .statusCode(400);
+    //Test fails here - because status code is 200 (instead of 400) and no error message
+    @Test
+    public void invalidParameterUpdateDepositPaid() {
+        String body = "{\"depositpaid\": \"a\"}";
+        bookerService.updateBooking(body, BAD_REQUEST, bookingId, JSON, COOKIE);
+    }
 
-        //Test fails here - because status code is 200 and no error message
-        given()
-                .contentType(JSON)
-                .header("Cookie", "token=" + token)
-                .body("{\"depositpaid\": \"a\"}")
-                .when()
-                .patch("/booking/{id}", bookingId)
-                .then()
-                .statusCode(400);
+    //Test fails here - because status code is 200 (instead of 400) and no error message
+    @Test
+    public void invalidParameterUpdateCheckIn() {
+        String body = "{\"bookingdates\": {\"checkin\": \"a\"}}";
+        bookerService.updateBooking(body, BAD_REQUEST, bookingId, JSON, COOKIE);
+    }
 
-
-        //Test fails here - "Invalid date" error message is displayed, but status code is 200
-        given()
-                .contentType(JSON)
-                .header("Cookie", "token=" + token)
-                .body("{\"bookingdates\": {\"checkin\": \"a\"}")
-                .when()
-                .patch("/booking/{id}", bookingId)
-                .then()
-                .statusCode(400);
-
-        //Test fails here - "Invalid date" error message is displayed, but status code is 200
-        given()
-                .contentType(JSON)
-                .header("Cookie", "token=" + token)
-                .body("{\"bookingdates\": {\"checkout\": \"b\"}}")
-                .when()
-                .patch("/booking/{id}", bookingId)
-                .then()
-                .statusCode(400);
-
+    //Test fails here - because status code is 200 (instead of 400) and no error message
+    @Test
+    public void invalidParameterUpdateCheckOut() {
+        String body = "{\"bookingdates\": {\"checkout\": \"b\"}}";
+        bookerService.updateBooking(body, BAD_REQUEST, bookingId, JSON, COOKIE);
     }
 
     //Test is failed because update of <depositpaid> works very incorrect:
@@ -148,42 +116,14 @@ public class PartialUpdateBookingTests extends CreateBookingFixture {
     // when we pass either "false" or "true" (when field is already defined as "false") -> it is re-set as "true" (in both cases)
     @Test
     public void testPartialUpdateWithXmlAndBasicAuth() {
+        BookingDetails updateRequest = BookerService.buildRequest();
+        String xmlRequest = BookerServiceHelper.getXml(updateRequest);
+        String xmlResponse = bookerService.updateBooking(xmlRequest, SUCCESS, bookingId, XML, BASIC_AUTHORIZATION);
 
-        checkDefaultBookingData();
-        BookingDetails updateRequest = buildRequest();
-
-        String xmlRequest = null;
-        try {
-            JAXBContext jaxbContext = JAXBContext.newInstance(BookingDetails.class);
-            Marshaller jaxbMarshaller = jaxbContext.createMarshaller();
-            StringWriter writer = new StringWriter();
-            jaxbMarshaller.marshal(updateRequest, writer);
-            xmlRequest = writer.toString();
-        } catch (JAXBException e) {
-            LOGGER.info("Xml marshalling error occurs: " + e.getMessage());
-        }
-
-        String xmlResponse = given()
-                .header("Authorization", AUTH_HEADER)
-                .accept("application/xml")
-                .contentType("text/xml")
-                .body(xmlRequest)
-                .when()
-                .patch("/booking/{id}", bookingId)
-                .asString();
-
-        BookingDetails updateResponse = null;
-
-        try {
-            JAXBContext jaxbContext = JAXBContext.newInstance(BookingDetails.class);
-            Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
-            updateResponse = (BookingDetails) unmarshaller.unmarshal(new StringReader(xmlResponse));
-        } catch (JAXBException e) {
-            LOGGER.info("Xml unmarshalling error occurs: " + e.getMessage());
-        }
+        BookingDetails updateResponse = BookerServiceHelper.convertXmlStringToBookingDetails(xmlResponse);
 
         checkUpdatedBookingData(updateRequest, updateResponse);
-        BookingDetails getResponse = getBookingById();
+        BookingDetails getResponse = bookerService.getBookingById(bookingId);
         checkUpdatedBookingData(updateRequest, getResponse);
     }
 
@@ -192,130 +132,32 @@ public class PartialUpdateBookingTests extends CreateBookingFixture {
     // when we pass either "false" or "true" (when field is already defined as "false") -> it is re-set as "true" (in both cases)
     @Test
     public void testPartialUpdateWithUrlEncoded() {
-
-        checkDefaultBookingData();
-        BookingDetails updateRequest = buildRequest();
-
-        String updateResponse = given()
-                .contentType(URLENC)
-                .accept(URLENC)
-                .header("Cookie", "token=" + token)
-                .formParam("firstname", updateRequest.getFirstName())
-                .formParam("lastname", updateRequest.getLastName())
-                .formParam("totalprice", updateRequest.getTotalPrice())
-                .formParam("depositpaid", updateRequest.isDepositPaid())
-                .formParam("additionalneeds", updateRequest.getAdditionalNeeds())
-                .when()
-                .patch("/booking/{id}", bookingId)
-                .asString();
-
+        BookingDetails updateRequest = BookerService.buildRequest();
+        String updateResponse = bookerService.updateBookingWithParams(updateRequest, SUCCESS, bookingId, URLENC, COOKIE);
         checkUrlEncodedResponse(updateResponse, updateRequest);
 
         //GET by ID to check that correct data are saved
-        BookingDetails getResponse = given()
-                .contentType(JSON)
-                .header("Cookie", "token=" + token)
-                .urlEncodingEnabled(true)
-                .when()
-                .get("/booking/{id}", bookingId)
-                .as(BookingDetails.class);
-
+        BookingDetails getResponse = bookerService.getBookingById(bookingId);
         checkUpdatedBookingData(updateRequest, getResponse);
     }
 
-    @BeforeEach
-    public void setUp() {
-        createBooking();
-    }
-
-    @AfterEach
-    public void tearDown() {
-        given()
-                .contentType(JSON)
-                .header("Cookie", "token=" + token)
-                .when()
-                .delete("/booking/{id}", bookingId)
-                .then()
-                .statusCode(201)
-                .body(equalTo("Created"));
-    }
-
-    //GET by ID to check that correct data are saved
-    private BookingDetails getBookingById() {
-        return given()
-                .contentType(JSON)
-                .cookie("token=" + token)
-                .when()
-                .get("/booking/{id}", bookingId)
-                .as(BookingDetails.class);
-    }
-
-    //Partial update name, totalprice,depositpaid and additionalneeds fields
-    private BookingDetails buildRequest() {
-        Faker faker = new Faker();
-        return BookingDetails
-                .builder()
-                .firstName(faker.name().firstName())
-                .lastName(faker.name().lastName())
-                .totalPrice(faker.number().numberBetween(102, 10000))
-                .depositPaid(false)
-                .additionalNeeds(faker.chuckNorris().fact())
-                .build();
-    }
-
-    private void checkDefaultBookingData() {
-
-        BookingDetails response = given()
-                .contentType(JSON)
-                .when()
-                .get("/booking/{id}", bookingId)
-                .as(BookingDetails.class);
-        SoftAssertions softAssert = new SoftAssertions();
-        softAssert.assertThat(response.getFirstName()).
-                as("First name").isEqualTo("Franz");
-        softAssert.assertThat(response.getLastName()).
-                as("Last name").isEqualTo("Ferdinand");
-        softAssert.assertThat(response.isDepositPaid()).
-                as("Deposit paid").isEqualTo(true);
-        softAssert.assertThat(response.getAdditionalNeeds()).
-                as("Additional needs").isEqualTo("Mountains view room");
-        softAssert.assertThat(response.getTotalPrice()).
-                as("Total price").isEqualTo(101);
-
-        softAssert.assertAll();
-    }
-
     private void checkUpdatedBookingData(BookingDetails request, BookingDetails response) {
-        SoftAssertions softAssert = new SoftAssertions();
-        softAssert.assertThat(response.getFirstName()).
-                as("First name").isEqualTo(request.getFirstName());
-        softAssert.assertThat(response.getLastName()).
-                as("Last name").isEqualTo(request.getLastName());
-        softAssert.assertThat(response.isDepositPaid()).
-                as("Deposit paid").isEqualTo(false);
-        softAssert.assertThat(response.getAdditionalNeeds()).
-                as("Additional needs").isEqualTo(request.getAdditionalNeeds());
-        softAssert.assertThat(response.getTotalPrice()).
-                as("Total price").isEqualTo(request.getTotalPrice());
-        Date checkInDate;
-        Date checkOutDate;
         //In case when we partially update booking without changing dates
         if (request.getBookingDates() == null) {
-            checkInDate = booking.getBooking().getBookingDates().getCheckIn();
-            checkOutDate = booking.getBooking().getBookingDates().getCheckOut();
-        } else {
-            checkInDate = request.getBookingDates().getCheckIn();
-            checkOutDate = request.getBookingDates().getCheckOut();
+            request.setBookingDates(BookingDetails.BookingDates.builder()
+                    .checkIn(bookingResponse.getBooking().getBookingDates().getCheckIn())
+                    .checkOut(bookingResponse.getBooking().getBookingDates().getCheckOut())
+                    .build());
         }
-        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-        softAssert.assertThat(dateFormat.format(response.getBookingDates().getCheckIn())).
-                as("Check in date")
-                .isEqualTo(dateFormat.format(checkInDate));
-        softAssert.assertThat(dateFormat.format((response.getBookingDates().getCheckOut()))).
-                as("Check out date")
-                .isEqualTo(dateFormat.format(checkOutDate));
+        assertThat(request).usingRecursiveComparison().ignoringFields("bookingDates.checkIn", "bookingDates.checkOut").isEqualTo(response);
 
-        softAssert.assertAll();
+        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+        assertThat(dateFormat.format(response.getBookingDates().getCheckIn())).
+                as("Check in date")
+                .isEqualTo(dateFormat.format(request.getBookingDates().getCheckIn()));
+        assertThat(dateFormat.format((response.getBookingDates().getCheckOut()))).
+                as("Check out date")
+                .isEqualTo(dateFormat.format(request.getBookingDates().getCheckOut()));
     }
 
     private void checkUrlEncodedResponse(String response, BookingDetails updateRequest) {
