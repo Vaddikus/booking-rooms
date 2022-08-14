@@ -1,11 +1,10 @@
 package com.herokuapp.restfulbooker.model;
 
-import lombok.Builder;
-import lombok.Data;
+import org.springframework.beans.factory.annotation.Value;
 
-@Data
-@Builder
 public class TokenCredentials {
+    @Value("${token.username}")
     String username;
+    @Value("${token.password}")
     String password;
 }
